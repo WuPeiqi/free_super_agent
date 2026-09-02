@@ -1,0 +1,86 @@
+{
+  "name": "free-super-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "超级IP智能体 - 开源免费版",
+  "author": "武沛齐",
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "build:win": "electron-vite build && electron-builder --win portable",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "preview": "electron-vite preview"
+  },
+  "build": {
+    "appId": "com.free-super-agent.desktop",
+    "productName": "免费超级IP智能体",
+    "electronVersion": "42.0.1",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "node_modules/**/*",
+      "!node_modules/**/README*",
+      "!node_modules/**/*.md",
+      "!node_modules/**/test/**",
+      "!node_modules/**/tests/**",
+      "!node_modules/**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "src/assets/fonts",
+        "to": "fonts",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "SuperAgent-v${version}-win-x64.exe"
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "需要访问麦克风以录制语音克隆音色样本",
+        "NSLocalNetworkUsageDescription": "需要访问本地网络以连接你自行部署的视频对口型算力服务"
+      }
+    },
+    "dmg": {
+      "artifactName": "SuperAgent-v${version}-mac-${arch}.dmg"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ]
+  },
+  "dependencies": {
+    "element-plus": "^2.14.0",
+    "ffmpeg-static": "^5.3.0",
+    "vue": "^3.5.34"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "electron": "^42.0.1",
+    "electron-builder": "^26.0.0",
+    "electron-vite": "^5.0.0",
+    "typescript": "^6.0.3",
+    "vue-tsc": "^3.2.8"
+  }
+}

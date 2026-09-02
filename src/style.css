@@ -1,0 +1,121 @@
+:root {
+  color: #18212f;
+  background: #f3f5f8;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Microsoft YaHei", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-frame {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: 75px minmax(0, 1fr) 30px;
+  background: #f3f5f8;
+}
+
+.app-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.column-board {
+  min-width: calc(350px * 4 + 16px * 3);
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(350px, 1fr));
+  gap: 16px;
+}
+
+.secondary-button,
+.primary-button {
+  height: 38px;
+  min-width: 88px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.secondary-button {
+  border: 1px solid #cbd5e1;
+  color: #41546b;
+  background: #ffffff;
+}
+
+.primary-button {
+  border: 1px solid #2a6f97;
+  color: #ffffff;
+  background: #2a6f97;
+}
+
+.secondary-button:hover {
+  background: #f5f7fa;
+}
+
+.primary-button:hover {
+  background: #235e80;
+}
+
+@media (max-width: 640px) {
+  .app-content {
+    padding: 10px;
+  }
+
+  .column-board {
+    gap: 10px;
+    min-width: calc(400px * 4 + 10px * 3);
+  }
+}
+
+/* 高亮红色文字（用于强调） */
+.highlight-red {
+  color: #e53e3e;
+  font-weight: 700;
+}

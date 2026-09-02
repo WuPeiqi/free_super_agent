@@ -1,0 +1,128 @@
+name: 构建桌面端安装包
+
+on:
+  workflow_dispatch: # 手动点按钮触发
+  push:
+    tags:
+      - "v*" # 推 v1.0.0 这类 tag 时自动构建并发布 Release
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false # 一个平台失败不影响其他平台
+      matrix:
+        include:
+          - label: windows-x64
+            os: windows-latest
+            args: --win portable --x64
+            glob: dist/*.exe
+          - label: macos-arm64
+            os: macos-latest
+            args: --mac dmg --arm64
+            glob: dist/*.dmg
+    defaults:
+      run:
+        shell: bash # 三个平台统一用 bash，脚本只写一份
+    env:
+      # 没有苹果开发者证书，关掉自动签名发现，否则 mac 打包会因找不到证书而报错
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 准备 Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 缓存 Electron 与 electron-builder 下载内容
+        uses: actions/cache@v6
+        with:
+          # 三个平台的缓存目录都列出，不存在的会被自动忽略
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ matrix.label }}-eb-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ matrix.label }}-eb-
+
+      - name: 安装依赖（此步会下载对应平台的 ffmpeg 二进制）
+        run: npm ci
+
+      - name: 用 tag 版本号覆盖 package.json 版本
+        # 产物文件名取自 package.json 的 version，这里把 tag 的 v1.2.0 写成 1.2.0。
+        # 手动触发（没有 tag）时跳过本步，沿用仓库里的版本号。
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -e
+          npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+          node -e "console.log('打包版本号：' + require('./package.json').version)"
+
+      - name: 校验 ffmpeg 架构与 drawtext 滤镜
+        run: |
+          set -e
+          # ffmpeg-static 在 npm ci 阶段按当前 runner 的平台/架构下载对应二进制，
+          # 打包时经 asarUnpack 进入 resources/app.asar.unpacked/ 供应用调用
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            FF="node_modules/ffmpeg-static/ffmpeg.exe"
+          else
+            FF="node_modules/ffmpeg-static/ffmpeg"
+          fi
+          "$FF" -hide_banner -version | head -n 1
+          # macOS 上额外确认二进制架构与目标架构一致
+          if [ "${{ runner.os }}" = "macOS" ]; then file "$FF"; fi
+          # 字幕烧制依赖 drawtext（libfreetype），缺失就直接失败，避免发出坏包
+          "$FF" -hide_banner -filters | grep -q "drawtext" \
+            || { echo "::error::ffmpeg 缺少 drawtext 滤镜，字幕烧制会失败"; exit 1; }
+
+      - name: 类型检查 + 编译（等价于 npm run build）
+        run: npm run build
+
+      - name: 打包安装包（配置读自 package.json 的 build 字段）
+        run: npx electron-builder ${{ matrix.args }} --publish never
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.label }}
+          path: ${{ matrix.glob }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: 发布 Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      # Release 说明正文取自仓库里的 .github/release-notes.md，所以需要检出代码
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 下载全部产物
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # --notes-file 的内容排在前面，--generate-notes 生成的提交/贡献者列表接在后面
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file .github/release-notes.md \
+            --generate-notes

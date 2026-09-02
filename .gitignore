@@ -1,0 +1,9 @@
+node_modules
+out
+dist
+.vite
+*.log
+*.local
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
