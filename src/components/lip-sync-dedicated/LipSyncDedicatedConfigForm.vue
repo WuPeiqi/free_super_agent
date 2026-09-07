@@ -11,11 +11,11 @@ const { config } = useLipSyncDedicated()
         近期对口型模型已<span class="highlight-red">无法免费白嫖</span>，如需使用，请任选一种方式自行部署独享算力：
       </p>
       <ol class="config-tip-list">
-        <li>本地部署模型，电脑显存推荐 <strong>8G</strong> 及以上（永久免费）</li>
-        <li>租云主机部署模型，费用约 <span class="highlight-red">¥3/小时</span></li>
+        <li>本地电脑 部署模型，电脑显存推荐 <strong>6G</strong> 及以上（永久免费）</li>
+        <li>租云主机 部署模型，市场价约 <span class="highlight-red">¥1~3/小时</span></li>
       </ol>
       <p class="config-tip-foot">
-        部署教程详见：<a href="https://5x-class.feishu.cn/wiki/AjBXwM1zIidNKTkkFGocqEqWnLg" target="_blank" rel="noreferrer">独享算力部署指南</a>
+        模型部署教程详见：<a href="https://5x-class.feishu.cn/wiki/AjBXwM1zIidNKTkkFGocqEqWnLg" target="_blank" rel="noreferrer">独享算力部署指南</a>
       </p>
     </div>
     <label class="config-field">

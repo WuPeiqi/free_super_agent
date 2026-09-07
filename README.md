@@ -133,6 +133,10 @@ xattr -dr com.apple.quarantine "/Applications/免费超级IP智能体.app"
 
 获取本机算力地址，例如：  http://127.0.0.1:8383    后续要填入到对口型的模型配置中。
 
+![image-20260907181144389](assets/image-20260907181144389.png)
+
+
+
 
 
 ## 五、常见问题
