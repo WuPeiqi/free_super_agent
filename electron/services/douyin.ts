@@ -44,9 +44,11 @@ interface AwemeDetail {
   video?: AwemeVideo;
 }
 
-interface AwemeDetailResponse {
+/** iesdouyin 分享页 slidesinfo 接口响应 */
+interface SlidesInfoResponse {
   status_code?: number;
-  aweme_detail?: AwemeDetail;
+  aweme_details?: AwemeDetail[] | null;
+  filter_list?: { aweme_id?: string; reason?: number }[] | null;
 }
 
 /** 无水印视频候选项 */
@@ -131,133 +133,66 @@ export async function getVideoId(
   }
 }
 
-// ===== 反爬 Cookie 引导 =====
+// ===== 作品详情：iesdouyin 分享页 slidesinfo 接口 =====
 //
-// 抖音 Web 详情接口（aweme/v1/web/aweme/detail）需要合法的反爬 Cookie
-// （主要是 ttwid）才会返回数据，否则会以 403 / 空响应拦截。
-// 这里在请求详情接口前先获取这些 Cookie：
-//   1. 访问抖音首页拿到基础 Cookie（如 __ac_nonce）
-//   2. 调用 ttwid 注册接口拿到 ttwid
-// Node 的 fetch 没有自动 Cookie 管理，所以用一个模块级 Map 手动维护。
-
-const cookieJar = new Map<string, string>();
-
-/** 从响应的 Set-Cookie 头解析并写入 Cookie 池 */
-function storeSetCookies(response: Response): void {
-  const headers = response.headers as Headers & {
-    getSetCookie?: () => string[];
-  };
-  const setCookies = headers.getSetCookie?.() ?? [];
-
-  for (const raw of setCookies) {
-    const pair = raw.split(";")[0] ?? "";
-    const eq = pair.indexOf("=");
-    if (eq <= 0) continue;
-
-    const name = pair.slice(0, eq).trim();
-    const value = pair.slice(eq + 1).trim();
-    if (name) {
-      cookieJar.set(name, value);
-    }
-  }
-}
-
-/** 把 Cookie 池拼成请求头需要的 Cookie 字符串 */
-function buildCookieHeader(): string {
-  return [...cookieJar.entries()]
-    .map(([name, value]) => `${name}=${value}`)
-    .join("; ");
-}
-
-/** 刷新抖音反爬 Cookie（首页基础 Cookie + ttwid） */
-async function refreshDouyinCookies(signal: AbortSignal): Promise<void> {
-  // 1. 访问首页获取基础 Cookie
-  try {
-    const home = await fetch("https://www.douyin.com/", {
-      headers: {
-        "user-agent": desktopUserAgent,
-        referer: "https://www.douyin.com/",
-      },
-      redirect: "follow",
-      signal,
-    });
-    storeSetCookies(home);
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw error;
-    }
-    // 首页失败不致命，继续尝试 ttwid 注册
-  }
-
-  // 2. 注册 ttwid
-  const body = JSON.stringify({
-    region: "cn",
-    aid: 1768,
-    needFid: false,
-    union: true,
-    service: "www.ixigua.com",
-    cbUrlProtocol: "https",
-    migrate_info: { ticket: "", source: "node" },
-  });
-
-  const ttwidResponse = await fetch(
-    "https://ttwid.bytedance.com/ttwid/union/register/",
-    {
-      method: "POST",
-      headers: {
-        "user-agent": desktopUserAgent,
-        referer: "https://www.douyin.com/",
-        "content-type": "application/json",
-      },
-      body,
-      signal,
-    },
-  );
-
-  storeSetCookies(ttwidResponse);
-}
-
-// ===== Aweme Detail API 获取视频详细信息 =====
+// 原先使用的 Web 详情接口（www.douyin.com/aweme/v1/web/aweme/detail）已被抖音
+// Argus 风控拦截（403 "Uifid Not Found"），UIFID 由浏览器端 JS 生成，Node 无法伪造。
+//
+// 分享页前端使用的 slidesinfo 接口目前无需 Cookie 和签名即可返回完整作品详情
+// （含 desc 与多档 bit_rate 无水印地址）。实测要点：
+//   - request_source 必须为 0，取 200 时视频会被 filter_list 过滤（reason=8）
+//   - aid=6383（抖音 Web）返回的码率档位最多
 
 /**
- * 通过抖音 Web 详情接口获取视频信息（包含多个无水印下载候选地址）。
- * 依赖 refreshDouyinCookies 预先获取的反爬 Cookie。
+ * 通过分享页 slidesinfo 接口获取作品详情（包含多个无水印下载候选地址）。
  */
 async function getAwemeDetail(
   videoId: string,
   signal: AbortSignal,
 ): Promise<AwemeDetail> {
   const detailUrl = new URL(
-    "https://www.douyin.com/aweme/v1/web/aweme/detail/",
+    "https://www.iesdouyin.com/web/api/v2/aweme/slidesinfo/",
   );
-  detailUrl.searchParams.set("aweme_id", videoId);
+  detailUrl.searchParams.set("aweme_ids", `[${videoId}]`);
+  detailUrl.searchParams.set("aid", "6383");
+  detailUrl.searchParams.set("request_source", "0");
 
   const response = await fetch(detailUrl.toString(), {
     headers: {
-      "user-agent": desktopUserAgent,
-      referer: "https://www.douyin.com/",
-      cookie: buildCookieHeader(),
+      "user-agent": mobileUserAgent,
+      referer: `https://www.iesdouyin.com/share/video/${videoId}/`,
+      accept: "application/json, text/plain, */*",
     },
     signal,
   });
 
   if (!response.ok) {
-    throw new Error(`Aweme Detail API 请求失败：${response.status}`);
+    throw new Error(`作品详情接口请求失败：${response.status}`);
   }
 
   const text = await response.text();
 
   if (!text.trim()) {
-    throw new Error("Aweme Detail API 返回空响应（可能被反爬拦截）");
+    throw new Error("作品详情接口返回空响应（可能被反爬拦截）");
   }
 
-  const data = JSON.parse(text) as AwemeDetailResponse;
-
-  if (!data.aweme_detail) {
-    throw new Error("未获取到作品详情，可能已删除、私密或接口有变动");
+  let data: SlidesInfoResponse;
+  try {
+    data = JSON.parse(text) as SlidesInfoResponse;
+  } catch {
+    throw new Error("作品详情接口返回内容无法解析，接口可能有变动");
   }
 
-  return data.aweme_detail;
+  const detail = data.aweme_details?.[0];
+
+  if (!detail) {
+    const reason = data.filter_list?.[0]?.reason;
+    throw new Error(
+      `未获取到作品详情，可能已删除、私密或接口有变动${reason !== undefined ? `（过滤原因：${reason}）` : ""}`,
+    );
+  }
+
+  return detail;
 }
 
 /**
@@ -370,7 +305,6 @@ async function downloadFirstAvailable(
         headers: {
           "user-agent": desktopUserAgent,
           referer: `https://www.douyin.com/video/${videoId}`,
-          cookie: buildCookieHeader(),
           accept: "*/*",
         },
         redirect: "follow",
@@ -430,9 +364,7 @@ export async function extractDouyinVideo(
 ): Promise<DouyinExtractionResult> {
   const videoId = await getVideoId(textOrUrl, signal);
 
-  // 先获取反爬 Cookie，再请求详情接口拿无水印地址
-  await refreshDouyinCookies(signal);
-
+  // 通过分享页 slidesinfo 接口拿作品详情与无水印地址
   const awemeDetail = await getAwemeDetail(videoId, signal);
 
   const candidates = getNoWatermarkCandidates(awemeDetail);
