@@ -234,9 +234,9 @@ async function createRewriteCopy(
   try {
     const account = await requireMoarkAccount();
 
-    // 文案创作仅支持模力方舟，模型固定为 Qwen3-32B
+    // 文案创作仅支持模力方舟：优先 DeepSeek-R1-Distill-Qwen-14B，失败再用 Qwen3-32B
     return await createCopyMoark(
-      { apiKey: account.apiKey, modelName: "Qwen3-32B" },
+      { apiKey: account.apiKey },
       payload,
       controller.signal,
     );
