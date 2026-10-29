@@ -163,14 +163,53 @@ export async function verifyMoarkCookie(cookies: string): Promise<boolean> {
 }
 
 interface MoarkTokenItem {
+  id?: number;
   token?: string;
   type?: string;
   status?: number;
 }
 
 /**
+ * 判断令牌是否为打码值。
+ * 令牌列表接口返回的 token 中间是 "*"（如 5MIG7YRS****…****MBNXWTV），
+ * 不能直接用于模型调用，否则一律 401。
+ */
+export function isMaskedMoarkToken(token: string): boolean {
+  return token.includes("*");
+}
+
+/**
+ * 用令牌详情接口（GET /api/base/<namespace>/tokens/<id>）取完整明文令牌。
+ */
+async function fetchMoarkTokenDetail(
+  cookies: string,
+  namespacePath: string,
+  tokenId: number,
+): Promise<string> {
+  const url = `${MOARK_ORIGIN}/api/base/${encodeURIComponent(namespacePath)}/tokens/${tokenId}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Cookie: cookies, "User-Agent": DESKTOP_UA },
+  });
+  if (!response.ok) {
+    logInfo(
+      "moark-token",
+      `获取令牌详情失败: HTTP ${response.status} namespace=${namespacePath} id=${tokenId}`,
+    );
+    throw new Error(`获取访问令牌详情失败（${response.status}）`);
+  }
+  const data = (await response.json()) as MoarkTokenItem;
+  const token = data.token?.trim() ?? "";
+  if (!token || isMaskedMoarkToken(token)) {
+    throw new Error("获取访问令牌失败：未能取到完整令牌，请重新授权登录");
+  }
+  return token;
+}
+
+/**
  * 用 cookie 请求访问令牌接口，返回 access 类型令牌作为 apiKey。
  * 优先取 type==="access" 且 status===1 的第一项，否则取第一项。
+ * 列表接口返回的是打码令牌，因此再按 id 调详情接口拿完整令牌。
  *
  * namespacePath 必须是当前登录账户自己的命名空间（userinfo 的 namespace_path），
  * 传错会得到 401。
@@ -208,10 +247,19 @@ export async function fetchMoarkAccessToken(
   const preferred = data.find(
     (item) => item.type === "access" && item.status === 1 && item.token,
   );
-  const token = (preferred ?? data[0])?.token;
+  const item = preferred ?? data[0];
+  const token = item?.token;
 
   if (!token) {
     throw new Error("未获取到访问令牌，请确认账户已开通模力方舟免费体验");
+  }
+
+  // 列表里的令牌是打码的，需要按 id 再取一次完整值
+  if (isMaskedMoarkToken(token)) {
+    if (typeof item.id !== "number") {
+      throw new Error("获取访问令牌失败：令牌缺少 id，无法取得完整令牌");
+    }
+    return fetchMoarkTokenDetail(cookies, namespacePath, item.id);
   }
 
   return token;

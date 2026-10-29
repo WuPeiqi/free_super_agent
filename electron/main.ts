@@ -51,6 +51,7 @@ import {
   openMoarkLoginWindow,
   fetchMoarkUserInfo,
   fetchMoarkAccessToken,
+  isMaskedMoarkToken,
   clearMoarkLoginSession,
   fetchMoarkCallQuota,
   type MoarkAccountStore,
@@ -168,6 +169,21 @@ async function requireMoarkAccount(): Promise<MoarkAccountStore> {
   const account = await loadMoarkAccount();
   if (!account.apiKey.trim()) {
     throw new Error("请先在右上角【配置中心】完成模力方舟授权登录");
+  }
+  // 旧版本保存的是列表接口返回的打码令牌（含 *），调用模型会 401。
+  // 这里用 cookie 自动换成完整令牌并写回，用户无需重新登录。
+  if (isMaskedMoarkToken(account.apiKey)) {
+    const namespacePath =
+      account.account?.namespacePath ||
+      (await fetchMoarkUserInfo(account.cookies))?.namespacePath ||
+      "";
+    if (!namespacePath) {
+      throw new Error("模力方舟登录已失效，请在右上角【配置中心】重新授权登录");
+    }
+    const apiKey = await fetchMoarkAccessToken(account.cookies, namespacePath);
+    const refreshed = { ...account, apiKey };
+    await saveMoarkAccount(refreshed);
+    return refreshed;
   }
   return account;
 }
